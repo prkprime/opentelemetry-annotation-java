@@ -1,21 +1,23 @@
-package com.opentelemetry.aop.advices;
+package dev.prkprime.aop;
 
-import java.lang.reflect.Method;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.reflect.MethodSignature;
-import com.opentelemetry.annotations.InjectChildSpanToContext;
+import dev.prkprime.annotations.InjectSpanToContext;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
+
+import java.lang.reflect.Method;
 
 @Aspect
-public class InjectChildSpanToContextAdvice {
+public class InjectSpanToContextAdvice {
 
-	@Around("@annotation(com.opentelemetry.annotations.InjectChildSpanToContext) && execution(* *(..))")
+	@Around("@annotation(com.opentelemetry.annotations.InjectSpanToContext) && execution(* *(..))")
 	public Object injectSpan(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
 
 		OpenTelemetry openTelemetry = GlobalOpenTelemetry.get();
@@ -27,7 +29,7 @@ public class InjectChildSpanToContextAdvice {
 
 				MethodSignature signature = (MethodSignature) proceedingJoinPoint.getSignature();
 				Method method = signature.getMethod();
-				InjectChildSpanToContext injectTraceSpan = method.getAnnotation(InjectChildSpanToContext.class);
+				InjectSpanToContext injectTraceSpan = method.getAnnotation(InjectSpanToContext.class);
 				String spanName = injectTraceSpan.spanName();
 
 				String className = proceedingJoinPoint.getSignature().getDeclaringTypeName();
@@ -37,9 +39,11 @@ public class InjectChildSpanToContextAdvice {
 
 				Span span = tracer.spanBuilder(spanName == null ? methodName : spanName).setParent(Context.current())
 						.startSpan();
-
-				object = proceedingJoinPoint.proceed(); // Invoking InjectChildSpanToContext annotation added method
-				span.end();
+				try (Scope scope = span.makeCurrent()) {
+					object = proceedingJoinPoint.proceed(); // Invoking InjectSpanToContext annotation added method
+				} finally {
+					span.end();
+				}
 
 				return object;
 
@@ -51,7 +55,6 @@ public class InjectChildSpanToContextAdvice {
 		} catch (Exception e) {
 			object = proceedingJoinPoint.proceed();
 			return object;
-
 		}
 
 	}
